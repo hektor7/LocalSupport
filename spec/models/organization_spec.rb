@@ -61,9 +61,9 @@ describe Organization do
   end
 
   it 'finds all orgs in a particular category' do
-    expect(Organization.filter_by_category("1")).not_to include @org1
-    expect(Organization.filter_by_category("1")).to include @org2
-    expect(Organization.filter_by_category("1")).to include @org3
+    expect(Organization.filter_by_category(@category1.id)).not_to include @org1
+    expect(Organization.filter_by_category(@category1.id)).to include @org2
+    expect(Organization.filter_by_category(@category1.id)).to include @org3
   end
 
   it 'finds all orgs when category is nil, and returns ActiveRecord::Relation to keep kaminari happy' do
@@ -92,7 +92,7 @@ describe Organization do
   end
 
   it 'searches by keyword and filters by category and has results' do
-    result = Organization.search_by_keyword("Indian").filter_by_category("1")
+    result = Organization.search_by_keyword("Indian").filter_by_category(@category1.id)
     expect(result).to include @org2
     expect(result).not_to include @org1, @org3
   end
@@ -104,7 +104,7 @@ describe Organization do
   end
 
   it 'filters by category when searches by keyword is nil' do
-    result = Organization.search_by_keyword(nil).filter_by_category("1")
+    result = Organization.search_by_keyword(nil).filter_by_category(@category1.id)
     expect(result).to include @org2, @org3
     expect(result).not_to include @org1
   end
@@ -377,20 +377,41 @@ describe Organization do
 
   describe "importing emails" do
     it "should have a method import_emails" do
-      Organization.should respond_to(:import_emails)
-    end
-    it "should have a method import_emails" do
       Organization.should_receive(:add_email)
       Organization.should_receive(:import).with(nil,2,false) do |&arg|
         Organization.add_email(&arg)
       end
       Organization.import_emails(nil,2,false)
     end
+    it 'should handle absence of org gracefully' do
+      Organization.should_receive(:where).with("UPPER(name) LIKE ? ", "%I LOVE PEOPLE%").and_return(nil)
+      STDOUT.should_receive(:puts).with("i love people was not found")
+      expect(lambda{
+        Organization.add_email(fields = CSV.parse('i love people,,,,,,,test@example.org')[0],true)
+      }).not_to raise_error
+      
+    end
     it "should add email to org" do
-      Organization.should_receive(:find_by_name).with('friendly').and_return(@org1)
+      Organization.should_receive(:where).with("UPPER(name) LIKE ? ", "%FRIENDLY%").and_return([@org1])
       @org1.should_receive(:email=).with('test@example.org')
       @org1.should_receive(:save)
-      Organization.add_email(fields = CSV.parse('friendly,test@example.org')[0],true)
+      Organization.add_email(fields = CSV.parse('friendly,,,,,,,test@example.org')[0],true)
+    end
+
+    it "should add email to org even with case mismatch" do
+      Organization.should_receive(:where).with("UPPER(name) LIKE ? ", "%FRIENDLY%").and_return([@org1])
+      @org1.should_receive(:email=).with('test@example.org')
+      @org1.should_receive(:save)
+      Organization.add_email(fields = CSV.parse('friendly,,,,,,,test@example.org')[0],true)
+    end
+
+    it 'should not add email to org when it has an existing email' do
+      @org1.email = 'something@example.com'
+      @org1.save!
+      Organization.should_receive(:where).with("UPPER(name) LIKE ? ", "%FRIENDLY%").and_return([@org1])
+      @org1.should_not_receive(:email=).with('test@example.org')
+      @org1.should_not_receive(:save)
+      Organization.add_email(fields = CSV.parse('friendly,,,,,,,test@example.org')[0],true)
     end
   end
 

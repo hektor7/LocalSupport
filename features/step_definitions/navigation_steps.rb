@@ -4,9 +4,47 @@ end
 And /^I select the "(.*?)" category$/ do |category|
   select(category, :from => "category[id]")
 end
-Then /^I should be on the home page$/ do
-  current_path.should == root_path()
+
+Then /^I should be on the (.*) page$/ do |location|
+  case location
+  when "home" then current_path.should == root_path()
+  when "sign up" then current_path.should == new_user_registration_path
+  when "sign in" then current_path.should == new_user_session_path
+  when "organizations index" then current_path.should == organizations_path
+  when "users" then current_path.should == users_path
+  end
 end
+
+Given(/^I try to access "(.*?)" page$/) do |page|
+  visit("/#{page}")
+end
+
+And(/^the page should be titled "(.*?)"$/) do |title|
+  page.should have_selector("title", title)
+end
+
+Then(/^the response status should be 404$/) do
+  page.status_code.should == 404
+  #page.response_code.should be 404
+end
+
+Then(/^I should be on the edit page for "(.*?)"$/) do |permalink|
+  pg = Page.find_by_permalink(permalink)
+  current_path.should eq( edit_page_path (pg.permalink ))
+end
+
+Given /^I press "(.*?)"$/ do |button|
+  click_button(button)
+end
+
+When /^I click "(.*)"$/ do |link|
+  click_link(link)
+end
+
+When /^(?:|I )follow "([^"]*)"$/ do |link|
+  click_link(link)
+end
+
 Given /^I am on the charity search page$/ do
   visit organizations_search_path
 end
@@ -48,3 +86,15 @@ Given /^I am furtively on the edit charity page for "(.*?)"$/ do |name|
   visit edit_organization_path org.id
 end
 
+Given(/^I am on the edit page with the "(.*?)" permalink$/) do |permalink|
+  pg = Page.find_by_permalink(permalink)
+  visit edit_page_path pg.permalink
+end
+
+When(/^I visit "(.*?)"$/) do |path|
+  visit path
+end
+
+Then(/^the "([^"]*)" should be "([^"]*)"$/) do |id, css_class|
+    page.should have_css("##{id}.#{css_class}")
+end
