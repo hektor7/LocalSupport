@@ -2,7 +2,7 @@ class User < ActiveRecord::Base
   # Include default devise modules. Others available are:
   # :token_authenticatable, :confirmable,
   # :lockable, :timeoutable and :omniauthable
-  devise :database_authenticatable, :registerable,
+  devise :invitable, :database_authenticatable, :registerable,
          :recoverable, :rememberable, :trackable, :validatable, :confirmable
 
   # http://stackoverflow.com/a/4558910/2197402
@@ -21,14 +21,21 @@ class User < ActiveRecord::Base
     super
     make_admin_of_org_with_matching_email
   end
-  
+
+  def accept_invitation!
+    super
+    make_admin_of_org_with_matching_email
+  end
+
   def can_edit? org
     admin? || (!org.nil? && organization == org)
   end
+
   def can_request_org_admin? org
-#    admin false, pending_organization  pending_organization!=organization org != organization
+    # admin false, pending_organization  pending_organization!=organization org != organization
     !admin? && organization != org && pending_organization != org
   end
+
   def make_admin_of_org_with_matching_email
     org = Organization.find_by_email self.email
     self.organization = org if org
@@ -42,5 +49,12 @@ class User < ActiveRecord::Base
     save!
   end
 
-end
+  def message_for_invite
+    errors.any? ? "Error: #{errors.full_messages.first}" : 'Invited!'
+  end
 
+  def request_admin_status(organization_id)
+    self.pending_organization_id = organization_id
+    save!
+  end
+end

@@ -24,6 +24,62 @@ describe Organization do
     @org3.save!
   end
 
+  context 'scopes for orphan orgs' do
+    before(:each) do
+      @user = FactoryGirl.create(:user, :email => "hello@hello.com")
+      @user.confirm!
+    end
+
+    it 'should allow us to grab orgs with emails' do
+      Organization.not_null_email.should eq []
+      @org1.email = "hello@hello.com"
+      @org1.save
+      Organization.not_null_email.should eq [@org1]
+    end
+
+    it 'should allow us to grab orgs with no admin' do
+      Organization.null_users.sort.should eq [@org1, @org2, @org3].sort
+      @org1.email = "hello@hello.com"
+      @org1.save
+      @user.confirm!
+      @org1.users.should eq [@user]
+      Organization.null_users.sort.should eq [@org2, @org3].sort
+    end
+
+    it 'should allow us to exclude previously invited users' do
+      @org1.email = "hello@hello.com"
+      @org1.save
+      Organization.without_matching_user_emails.should_not include @org1
+    end
+
+    # Should we have more tests to cover more possible combinations?
+    it 'should allow us to combine scopes' do
+      @org1.email = "hello@hello.com"
+      @org1.save
+      @org3.email = "hello_again@you_again.com"
+      @org3.save
+      Organization.null_users.not_null_email.sort.should eq [@org1, @org3]
+      Organization.null_users.not_null_email.without_matching_user_emails.sort.should eq [@org3]
+    end
+  end
+
+  context 'validating URLs' do
+    subject(:no_http_org) { FactoryGirl.build(:organization, :name => 'Harrow Bereavement Counselling', :description => 'Bereavement Counselling', :address => '64 pinner road', :postcode => 'HA1 3TE', :donation_info => 'www.harrow-bereavment.co.uk/donate') }
+    subject(:empty_website)  {FactoryGirl.build(:organization, :name => 'Harrow Bereavement Counselling', :description => 'Bereavement Counselling', :address => '64 pinner road', :postcode => 'HA1 3TE', :donation_info => '', :website => '')}
+    it 'if lacking protocol, http is prefixed to URL when saved' do
+      no_http_org.save!
+      no_http_org.donation_info.should include('http://')
+    end
+
+    it 'a URL is left blank, no validation issues arise' do
+      expect {no_http_org.save! }.to_not raise_error
+    end
+
+    it 'does not raise validation issues when URLs are empty strings' do
+      expect {empty_website.save!}.to_not raise_error
+    end
+  end
+
   context 'adding charity admins by email' do
     it 'handles a non-existent email with an error' do
       expect(@org1.update_attributes_with_admin({:admin_email_to_add => 'nonexistentuser@example.com'})).to be_false
@@ -383,14 +439,15 @@ describe Organization do
       end
       Organization.import_emails(nil,2,false)
     end
+
     it 'should handle absence of org gracefully' do
       Organization.should_receive(:where).with("UPPER(name) LIKE ? ", "%I LOVE PEOPLE%").and_return(nil)
-      STDOUT.should_receive(:puts).with("i love people was not found")
       expect(lambda{
-        Organization.add_email(fields = CSV.parse('i love people,,,,,,,test@example.org')[0],true)
+        response = Organization.add_email(fields = CSV.parse('i love people,,,,,,,test@example.org')[0],true)
+        response.should eq "i love people was not found\n"
       }).not_to raise_error
-      
     end
+
     it "should add email to org" do
       Organization.should_receive(:where).with("UPPER(name) LIKE ? ", "%FRIENDLY%").and_return([@org1])
       @org1.should_receive(:email=).with('test@example.org')
@@ -412,6 +469,36 @@ describe Organization do
       @org1.should_not_receive(:email=).with('test@example.org')
       @org1.should_not_receive(:save)
       Organization.add_email(fields = CSV.parse('friendly,,,,,,,test@example.org')[0],true)
+    end
+  end
+
+  describe '#generate_potential_user' do
+    let(:org) { @org1 }
+    # using a stub_model confuses User.should_receive on line 450 because it's expecting :new from my organization.rb, but instead the stub_model calls it first
+    let(:user) { double('User', {:email => org.email, :password => 'password'}) }
+
+    before :each do
+      Devise.stub_chain(:friendly_token, :first).with().with(8).and_return('password')
+      User.should_receive(:new).with({:email => org.email, :password => 'password'}).and_return(user)
+    end
+
+    it 'early returns a (broken) user when the user is invalid' do
+      user.should_receive(:valid?).and_return(false)
+      user.should_receive(:save)
+    end
+
+    it 'returns a user' do
+      user.should_receive(:valid?).and_return(true)
+      user.should_receive(:skip_confirmation_notification!)
+      User.should_receive(:reset_password_token)
+      user.should_receive(:reset_password_token=)
+      user.should_receive(:reset_password_sent_at=)
+      user.should_receive(:save!)
+      user.should_receive(:confirm!)
+    end
+
+    after(:each) do
+      org.generate_potential_user.should eq(user)
     end
   end
 

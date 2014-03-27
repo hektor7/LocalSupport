@@ -7,17 +7,25 @@ class String
 end
 
 class Organization < ActiveRecord::Base
+  #validates_presence_of :website, :with => /http:\/\//
+  validates_url :website, :prefferred_scheme => 'http://', :if => Proc.new{|org| org.website.present?}
+  validates_url :donation_info, :prefferred_scheme => 'http://', :if => Proc.new{|org| org.donation_info.present?}
+
   # http://stackoverflow.com/questions/10738537/lazy-geocoding
   acts_as_gmappable :check_process => false, :process_geocoding => :run_geocode?
   has_many :users
   has_and_belongs_to_many :categories
   # Setup accessible (or protected) attributes for your model
   # prevents mass assignment on other fields not in this list
-  attr_accessible :name, :description, :address, :postcode, :email, :website, :telephone, :donation_info
+  attr_accessible :name, :description, :address, :postcode, :email, :website, :telephone, :donation_info, :publish_address, :publish_phone, :publish_email
   accepts_nested_attributes_for :users
-
-  # if we removed check_process => false saving the model would not trigger a geocode
-  #after_commit :process_geocoding
+  scope :order_by_most_recent, order('updated_at DESC')
+  scope :not_null_email, :conditions => "organizations.email <> ''"
+  # Should we not use :includes, which pulls in extra data? http://nlingutla.com/blog/2013/04/21/includes-vs-joins-in-rails/
+  # Alternative => :joins('LEFT OUTER JOIN users ON users.organization_id = organizations.id)
+  # Difference between inner and outer joins: http://stackoverflow.com/a/38578/2197402
+  scope :null_users, lambda { includes(:users).where("users.organization_id IS NULL") }
+  scope :without_matching_user_emails, :conditions => "organizations.email NOT IN (#{User.select('email').to_sql})"
 
   def run_geocode?
     ## http://api.rubyonrails.org/classes/ActiveModel/Dirty.html
@@ -87,9 +95,11 @@ class Organization < ActiveRecord::Base
       date_removed: 'date removed',
       cc_id: 'Charity Classification'
   }
+
   def self.column_mappings
     @@column_mappings
   end
+
   def self.import_categories_from_array(row)
     check_columns_in(row)
     org_name = row[@@column_mappings[:name]].to_s.humanized_all_first_capitals
@@ -107,18 +117,22 @@ class Organization < ActiveRecord::Base
   end
 
   def self.import_category_mappings(filename, limit)
-    import(filename, limit, false) do |row, validation| 
-      import_categories_from_array(row) 
+    import(filename, limit, false) do |row, validation|
+      import_categories_from_array(row)
     end
   end
 
   def self.create_from_array(row, validate)
-    CreateOrganizationFromArray.new(row).call(validate)
+    CreateOrganizationFromArray.create(Organization, row, validate)
+  end
+
+  def self.create_and_validate(attributes) 
+    create!(attributes)
   end
 
   def self.import_addresses(filename, limit, validation = true)
-    import(filename, limit, validation) do |row, validation| 
-       create_from_array(row, validation) 
+    import(filename, limit, validation) do |row, validation|
+       create_from_array(row, validation)
     end
   end
 
@@ -137,19 +151,19 @@ class Organization < ActiveRecord::Base
   end
 
   def self.import_emails(filename, limit, validation = true)
+    str = ''
     import(filename, limit, validation) do |row, validation|
-      add_email(row, validation)
+      str << add_email(row, validation)
     end
+    str
   end
 
   def self.add_email(row, validation)
     orgs = where("UPPER(name) LIKE ? ","%#{row[0].try(:upcase)}%")
-    if orgs && orgs[0] && orgs[0].email.blank?
-      orgs[0].email = row[7]
-      orgs[0].save
-    else
-      puts "#{row[0]} was not found"
-    end
+    return "#{row[0]} was not found\n" unless orgs && orgs[0] && orgs[0].email.blank?
+    orgs[0].email = row[7]
+    orgs[0].save
+    return "#{row[0]} was found\n"
   end
 
   def self.check_columns_in(row)
@@ -158,6 +172,21 @@ class Organization < ActiveRecord::Base
         raise CSV::MalformedCSVError, "No expected column with name #{column_name} in CSV file"
       end
     end
+  end
+
+  def generate_potential_user
+    password = Devise.friendly_token.first(8)
+    user = User.new(:email => self.email, :password => password)
+    unless user.valid?
+      user.save
+      return user # so that it can be inspected for errors
+    end
+    user.skip_confirmation_notification!
+    user.reset_password_token=(User.reset_password_token)
+    user.reset_password_sent_at=Time.now
+    user.save!
+    user.confirm!
+    user
   end
 
   private

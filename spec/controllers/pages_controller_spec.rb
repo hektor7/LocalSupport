@@ -40,16 +40,21 @@ describe PagesController do
       get :index, {}
       assigns(:pages).should eq([page])
     end
+
+    it 'should use a full-width layout' do
+      get :index, {}
+      response.should render_template 'layouts/full_width'
+    end
   end
 
-  describe "GET show" do
+  describe "GET show", :helpers => :controllers do
     before :each do
-      admin_user = double('User')
-      admin_user.stub(:admin?).and_return(true)
-      controller.stub(:current_user).and_return(admin_user)
+      make_current_user_admin
       @valid_page = double('Page', :name => 'About Us', :permalink => 'about', :content => 'blah blah')
       @error_page = double('Page')
     end
+
+    after(:each) {response.should render_template 'layouts/full_width'}
 
     it 'assigns @admin if current_user is admin' do
       Page.stub(:find_by_permalink!)
@@ -82,13 +87,17 @@ describe PagesController do
       get :show, { :id => 'lalala'}
       response.status.should eq 404
     end
-
   end
 
   describe "GET new" do
     it "assigns a new page as @page" do
       get :new, {}
       assigns(:page).should be_a_new(Page)
+    end
+
+    it 'should use a full-width layout' do
+      get :new, {}
+      response.should render_template 'layouts/full_width'
     end
   end
 
@@ -97,6 +106,12 @@ describe PagesController do
       page = Page.create! valid_attributes
       get :edit, {:id => page.to_param}
       assigns(:page).should eq(page)
+    end
+
+    it 'should use a full-width layout' do
+      page = Page.create! valid_attributes
+      get :edit, {:id => page.to_param}
+      response.should render_template 'layouts/full_width'
     end
   end
 

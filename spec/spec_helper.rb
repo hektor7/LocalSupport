@@ -10,7 +10,9 @@ require 'capybara'
 require 'capybara-webkit'
 require 'capybara/rspec'
 require 'factory_girl_rails'
-require "rack_session_access/capybara"
+require 'rack_session_access/capybara'
+require 'webmock/rspec'
+require_relative './controller_helper'
 Capybara.javascript_driver = :webkit
 
 # Requires supporting ruby files with custom matchers and macros, etc,
@@ -42,6 +44,7 @@ RSpec.configure do |config|
   config.before(:each) { ActionMailer::Base.deliveries.clear }
   
   config.include FactoryGirl::Syntax::Methods
+  config.include ControllerHelpers, :helpers => :controllers
 
 end
 

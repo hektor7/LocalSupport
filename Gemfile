@@ -4,6 +4,8 @@ ruby '1.9.3'
 gem 'rails', '3.2.14'
 gem 'pg'
 gem 'devise', '3.0.3'
+gem 'devise_invitable', '~> 1.2.1'
+gem 'heroku-api'
 
 # Bundle edge Rails instead:
 # gem 'rails',     :git => 'git://github.com/rails/rails.git'
@@ -16,8 +18,10 @@ group :development, :test do
   gem 'simplecov'
   gem 'rspec-rails'
   gem 'execjs'
+  gem 'aruba'
   gem 'rack_session_access'
-  gem 'simplecov', :require => false
+  gem 'jasmine'
+  gem 'jasmine-jquery-rails'
 end
 
 group :development do
@@ -57,7 +61,10 @@ group :assets do
   gem 'twitter-bootstrap-rails'
 end
 
+gem 'font-awesome-rails'
+
 gem 'jquery-rails'
+gem 'bootstrap_sortable_rails', '~> 0.1.3'
 
 # Use unicorn as the web server
 # gem 'unicorn'
@@ -82,7 +89,7 @@ gem 'unicorn'
 # To use markdown in editing static pages
 gem 'redcarpet'
 
-# Adding font awesome
-gem "font-awesome-rails"
+# validating organization website URLs
+gem 'url_validator'
 
 
